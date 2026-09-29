@@ -3,6 +3,7 @@ import { realpathSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { Argument, CommanderError, Command } from 'commander';
 import { planConversion, writeConversion } from './converter.js';
 import { defaultHome } from './paths.js';
 import { listSessions } from './session-storages.js';
@@ -14,10 +15,14 @@ export interface CliIO {
   interactive: boolean;
 }
 
-interface ParsedOptions {
-  dryRun: boolean;
-  yes: boolean;
-  newId: boolean;
+interface ConvertOptions {
+  dry?: boolean;
+  yes?: boolean;
+  newId?: boolean;
+}
+
+interface ListOptions {
+  fullName?: boolean;
 }
 
 const defaultIO: CliIO = {
@@ -27,78 +32,95 @@ const defaultIO: CliIO = {
 };
 
 export async function runCli(args: string[], io: CliIO = defaultIO): Promise<number> {
-  const [command, ...rest] = args;
-  if (!command || command === '--help' || command === '-h' || command === 'help') {
-    printHelp(io.output);
-    return 0;
-  }
-  if (command === 'list') {
-    const provider = parseProvider(rest[0]);
-    parseOptions(rest.slice(1));
-    const sessions = await listSessions(provider, defaultHome(provider));
-    io.output.write(`${providerLabel(provider)} sessions (${sessions.length}):\n\n`);
-    for (const session of sessions) {
-      const messageLabel = session.messageCount === 1 ? 'message' : 'messages';
-      io.output.write(`${session.sessionId} · ${formatDateTime(session.timestamp)} (${session.messageCount} ${messageLabel}) · ${session.title}\n`);
-    }
-    return 0;
-  }
-  if (command === 'convert') {
-    const source = parseProvider(rest[0]);
-    const target = parseProvider(rest[1]);
-    const sessionId = rest[2];
-    if (!sessionId || sessionId.startsWith('--')) {
-      throw new Error('convert requires a source session ID');
-    }
-    const options = parseOptions(rest.slice(3));
-    const plan = await planConversion(source, target, sessionId, {
-      ...(options.newId ? { preserveIds: false } : {}),
-    });
-    io.output.write(`Source:      ${plan.source.path}\n`);
-    io.output.write(`Destination: ${plan.destination}\n`);
-    io.output.write(`Messages:    ${plan.messages.length}\n`);
-    for (const service of plan.services) {
-      io.output.write(`Service:     ${service.destination}\n`);
-    }
-    if (options.dryRun) {
-      io.output.write('Dry run; no files were written.\n');
-      return 0;
-    }
+  const program = new Command();
+  program
+    .name('asm')
+    .description('List and convert AI coding-agent sessions')
+    .configureOutput({
+      writeOut: (message) => { io.output.write(message); },
+      writeErr: () => {},
+    })
+    .exitOverride()
+    .addHelpText('after', `\nProviders: ${PROVIDERS.join(', ')}\n`);
 
-    const destinations = [plan.destination, ...plan.services.map((service) => service.destination)];
-    const existing = await existingPaths(destinations);
-    let overwrite = options.yes;
-    if (existing.length && !options.yes) {
-      const confirmed = await confirmOverwrite(existing, io);
-      if (!confirmed) {
-        io.output.write('Conversion cancelled; no files were written.\n');
-        return 0;
+  program
+    .command('list')
+    .description('List sessions for a provider')
+    .addArgument(new Argument('<provider>', 'provider whose sessions to list').choices(PROVIDERS))
+    .option('--full-name', 'Show complete session titles without truncating fallback titles')
+    .action(async (providerName: string, options: ListOptions) => {
+      const provider = parseProvider(providerName);
+      const sessions = await listSessions(provider, defaultHome(provider), {
+        fullName: options.fullName === true,
+      });
+      io.output.write(`${providerLabel(provider)} sessions (${sessions.length}):\n\n`);
+      for (const session of sessions) {
+        const messageLabel = session.messageCount === 1 ? 'message' : 'messages';
+        io.output.write(`${session.sessionId} · ${formatDateTime(session.timestamp)} (${session.messageCount} ${messageLabel}) · ${session.title}\n`);
       }
-      overwrite = true;
-    }
-    await writeConversion(plan, overwrite);
-    io.output.write('Conversion written.\n');
+    });
+
+  program
+    .command('convert')
+    .description('Convert a session between providers')
+    .addArgument(new Argument('<source>', 'provider containing the session').choices(PROVIDERS))
+    .addArgument(new Argument('<target>', 'destination provider').choices(PROVIDERS))
+    .argument('<session-id>', 'ID of the session to convert')
+    .option('--dry', 'Preview without writing')
+    .option('-y, --yes', 'Automatically confirm interactive prompts, including overwrites')
+    .option('--new-id', 'Generate a new session ID')
+    .action(async (sourceName: string, targetName: string, sessionId: string, options: ConvertOptions) => {
+      const source = parseProvider(sourceName);
+      const target = parseProvider(targetName);
+      const plan = await planConversion(source, target, sessionId, {
+        ...(options.newId ? { preserveIds: false } : {}),
+      });
+      io.output.write(`Source:      ${plan.source.path}\n`);
+      io.output.write(`Destination: ${plan.destination}\n`);
+      io.output.write(`Messages:    ${plan.messages.length}\n`);
+      for (const service of plan.services) {
+        io.output.write(`Service:     ${service.destination}\n`);
+      }
+      if (options.dry) {
+        io.output.write('Dry run; no files were written.\n');
+        return;
+      }
+
+      const destinations = [plan.destination, ...plan.services.map((service) => service.destination)];
+      const existing = await existingPaths(destinations);
+      let overwrite = options.yes === true;
+      if (existing.length && !overwrite) {
+        const confirmed = await confirmOverwrite(existing, io);
+        if (!confirmed) {
+          io.output.write('Conversion cancelled; no files were written.\n');
+          return;
+        }
+        overwrite = true;
+      }
+      await writeConversion(plan, overwrite);
+      io.output.write('Conversion written.\n');
+    });
+
+  if (args.length === 0) {
+    program.outputHelp();
     return 0;
   }
-  throw new Error(`Unknown command: ${command}`);
-}
 
-function parseOptions(args: string[]): ParsedOptions {
-  const options: ParsedOptions = { dryRun: false, yes: false, newId: false };
-  for (let index = 0; index < args.length; index += 1) {
-    const item = args[index];
-    if (item === '--dry') options.dryRun = true;
-    else if (item === '-y' || item === '--yes') options.yes = true;
-    else if (item === '--new-id') options.newId = true;
-    else {
-      throw new Error(`Unknown option: ${item}`);
+  try {
+    await program.parseAsync(args, { from: 'user' });
+    return 0;
+  } catch (error) {
+    if (error instanceof CommanderError) {
+      if (error.code === 'commander.helpDisplayed') return error.exitCode;
+      throw new Error(error.message.replace(/^error:\s*/, ''));
     }
+    throw error;
   }
-  return options;
 }
 
-function parseProvider(value: string | undefined): Provider {
-  if (value && PROVIDERS.includes(value as Provider)) return value as Provider;
+function parseProvider(value: string): Provider {
+  const provider = PROVIDERS.find((candidate) => candidate === value);
+  if (provider) return provider;
   throw new Error(`Provider must be one of: ${PROVIDERS.join(', ')}`);
 }
 
@@ -149,18 +171,6 @@ async function confirmOverwrite(destinations: string[], io: CliIO): Promise<bool
   } finally {
     prompt.close();
   }
-}
-
-function printHelp(output: NodeJS.WritableStream): void {
-  output.write('asm\n\n');
-  output.write('Usage:\n');
-  output.write('  asm list <provider>\n');
-  output.write('  asm convert <source> <target> <session-id> [options]\n\n');
-  output.write(`Providers: ${PROVIDERS.join(', ')}\n\n`);
-  output.write('Options:\n');
-  output.write('  --dry                 Preview without writing (conversions write by default)\n');
-  output.write('  -y, --yes             Automatically confirm interactive prompts (including overwrites)\n');
-  output.write('  --new-id              Generate a new session ID\n');
 }
 
 function isMissing(error: unknown): boolean {

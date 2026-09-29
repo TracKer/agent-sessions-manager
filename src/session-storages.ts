@@ -9,7 +9,11 @@ import { formatNativeSessionTitle, titleFromMessages } from './session-title.js'
 
 const extractor = new MessageExtractor();
 
-export async function listSessions(provider: Provider, home = defaultHome(provider)): Promise<SessionSummary[]> {
+export async function listSessions(
+  provider: Provider,
+  home = defaultHome(provider),
+  options: { fullName?: boolean } = {},
+): Promise<SessionSummary[]> {
   const files = await sessionFiles(provider, home);
   const summaries: SessionSummary[] = [];
   for (const file of files) {
@@ -18,7 +22,7 @@ export async function listSessions(provider: Provider, home = defaultHome(provid
       summaries.push({
         provider,
         sessionId: session.sessionId,
-        title: sessionTitle(session),
+        title: sessionTitle(session, options.fullName === true),
         cwd: session.cwd,
         timestamp: provider === 'claude'
           ? latestRecordTimestamp(session.records) ?? session.timestamp
@@ -202,7 +206,7 @@ export function countMessages(session: NativeSession): number {
   }
 }
 
-function sessionTitle(session: NativeSession): string {
+function sessionTitle(session: NativeSession, fullName: boolean): string {
   let nativeTitle: string | undefined;
   if (session.provider === 'claude') {
     nativeTitle = latestClaudeCustomTitle(session.records);
@@ -211,7 +215,7 @@ function sessionTitle(session: NativeSession): string {
     nativeTitle = openCodeInfo ? stringValue(openCodeInfo, 'title') : undefined;
   }
   nativeTitle = formatNativeSessionTitle(nativeTitle);
-  return nativeTitle ?? titleFromMessages(extractor.extract(session)) ?? 'Untitled session';
+  return nativeTitle ?? titleFromMessages(extractor.extract(session), fullName) ?? 'Untitled session';
 }
 
 function latestClaudeCustomTitle(records: JsonObject[]): string | undefined {

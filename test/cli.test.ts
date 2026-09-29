@@ -115,17 +115,40 @@ afterEach(async () => {
 });
 
 describe('CLI conversion write modes', () => {
-  it('uses asm as the command name and describes -y as prompt confirmation', async () => {
+  it('shows global help without exposing command-specific options', async () => {
     const io = createIO();
     await runCli(['--help'], io.io);
-    expect(io.output()).toContain('Usage:\n  asm list <provider>');
-    expect(io.output()).toContain('  asm convert');
-    expect(io.output()).toContain('Automatically confirm interactive prompts (including overwrites)');
+    expect(io.output()).toContain('Usage: asm [options] [command]');
+    expect(io.output()).toContain('list [options] <provider>');
+    expect(io.output()).toContain('convert [options] <source> <target> <session-id>');
     expect(io.output()).not.toContain('--home');
     expect(io.output()).not.toContain('--source-home');
     expect(io.output()).not.toContain('--target-home');
     expect(io.output()).not.toContain('--pi-dcp-home');
+    expect(io.output()).not.toContain('--dry');
+    expect(io.output()).not.toContain('--yes');
     expect(io.output()).not.toContain('sessions list');
+  });
+
+  it('shows separate help and options for list and convert', async () => {
+    const listHelp = createIO();
+    await runCli(['list', '--help'], listHelp.io);
+    expect(listHelp.output()).toContain('Usage: asm list [options] <provider>');
+    expect(listHelp.output()).toContain('List sessions for a provider');
+    expect(listHelp.output()).toContain('provider whose sessions to list');
+    expect(listHelp.output()).toContain('"codex", "pi"');
+    expect(listHelp.output()).toContain('"opencode", "claude"');
+    expect(listHelp.output()).toContain('--full-name');
+    expect(listHelp.output()).not.toContain('--dry');
+    expect(listHelp.output()).not.toContain('--yes');
+
+    const convertHelp = createIO();
+    await runCli(['convert', '--help'], convertHelp.io);
+    expect(convertHelp.output()).toContain('Usage: asm convert [options] <source> <target> <session-id>');
+    expect(convertHelp.output()).toContain('--dry');
+    expect(convertHelp.output()).toContain('Automatically confirm interactive prompts, including overwrites');
+    expect(convertHelp.output()).toContain('--new-id');
+    expect(convertHelp.output()).not.toContain('--full-name');
   });
 
   it('writes by default and leaves destinations untouched with --dry', async () => {
@@ -144,11 +167,24 @@ describe('CLI conversion write modes', () => {
     expect(writeIO.output()).toContain('Conversion written.');
   });
 
+  it('generates a new session ID with --new-id', async () => {
+    const root = await tempDirectory();
+    const codexHome = path.join(root, '.codex');
+    const targetHome = path.join(root, '.claude');
+    await writeCodexSession(codexHome, 'New ID reply');
+
+    await runCli(['convert', 'codex', 'claude', sessionId, '--new-id'], createIO().io);
+
+    const [converted] = await listSessions('claude', targetHome);
+    expect(converted).toBeDefined();
+    expect(converted?.sessionId).not.toBe(sessionId);
+  });
+
   it.each(['--home', '--source-home', '--target-home', '--pi-dcp-home'])('rejects the removed %s flag', async (flag) => {
     await expect(runCli(
       ['list', 'claude', flag, '/tmp/custom-home'],
       createIO().io,
-    )).rejects.toThrow(`Unknown option: ${flag}`);
+    )).rejects.toThrow(new RegExp(`unknown option.*${flag}`, 'i'));
   });
 
   it('prints one-line sessions newest-first without file paths', async () => {
@@ -194,9 +230,27 @@ describe('CLI conversion write modes', () => {
     expect(io.output()).not.toContain('Fallback first user message');
   });
 
+  it('prints full fallback titles with --full-name', async () => {
+    const root = await tempDirectory();
+    const claudeHome = path.join(root, '.claude');
+    const id = '44444444-4444-4444-8444-444444444444';
+    const timestamp = '2026-08-04T10:30:00.000Z';
+    const fullTitle = 'A long fallback title '.repeat(8).trim();
+    await writeClaudeSession(claudeHome, id, timestamp, fullTitle);
+
+    const defaultIO = createIO();
+    await runCli(['list', 'claude'], defaultIO.io);
+    expect(defaultIO.output()).toContain(fullTitle.slice(0, 80));
+    expect(defaultIO.output()).not.toContain(fullTitle);
+
+    const fullNameIO = createIO();
+    await runCli(['list', 'claude', '--full-name'], fullNameIO.io);
+    expect(fullNameIO.output()).toContain(fullTitle);
+  });
+
   it('rejects the removed --dry-run alias', async () => {
     await expect(runCli(['convert', 'codex', 'claude', sessionId, '--dry-run'], createIO().io))
-      .rejects.toThrow('Unknown option: --dry-run');
+      .rejects.toThrow(/unknown option.*--dry-run/i);
   });
 
   it('prompts on conflicts, cancels on no, and lets -y/--yes replace without prompting', async () => {
@@ -228,7 +282,7 @@ describe('CLI conversion write modes', () => {
     await runCli([...args, '-y'], createIO().io);
     expect(await convertedTexts(targetHome)).toEqual(['CLI prompt', 'Short flag overwrite']);
 
-    await expect(runCli([...args, '--overwrite'], createIO().io)).rejects.toThrow('Unknown option: --overwrite');
+    await expect(runCli([...args, '--overwrite'], createIO().io)).rejects.toThrow(/unknown option.*--overwrite/i);
   });
 
   it('requires --yes to overwrite when there is no interactive terminal', async () => {

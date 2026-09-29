@@ -31,16 +31,22 @@ npm run build
 
 ## CLI
 
-All paths default to the corresponding local application directory. Conversions write by default; use `--dry` to preview without writing.
+All paths default to the corresponding local application directory. Conversions write by default; use `--dry` with `convert` to preview without writing.
 
 ```sh
+asm --help
+asm list --help
+asm convert --help
 asm list codex
+asm list codex --full-name
 asm convert codex pi <session-id>
 asm convert codex pi <session-id> --dry
 asm convert opencode claude <session-id>
 ```
 
-`asm list <provider>` prints a provider heading with the session count, a blank line, then one line per session in `ID · date/time (message count) · title` format. Sessions are sorted newest first, dates use the system locale and timezone, and paths are omitted. Provider-native titles are shown in full; fallback titles from the first non-empty user-message line are limited to 80 characters.
+Each command has its own help and options. `--full-name` applies to `list`; `--dry`, `-y`/`--yes`, and `--new-id` apply to `convert`.
+
+`asm list <provider>` prints a provider heading with the session count, a blank line, then one line per session in `ID · date/time (message count) · title` format. Sessions are sorted newest first, dates use the system locale and timezone, and paths are omitted. Provider-native titles are shown in full; fallback titles from the first non-empty user-message line are limited to 80 characters by default. `asm list --full-name` removes that limit.
 
 If an output already exists, the CLI asks whether to replace it. Answer `y` or `yes` to continue; any other answer cancels. Use `-y` or `--yes` to automatically confirm interactive prompts, including file-overwrite confirmation; in non-interactive scripts it skips the prompt and overwrites existing outputs.
 
