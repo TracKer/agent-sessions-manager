@@ -46,7 +46,7 @@ asm convert opencode claude <session-id>
 
 Each command has its own help and options. `--full-name` applies to `list`; `--dry`, `-y`/`--yes`, and `--new-id` apply to `convert`.
 
-`asm list <provider>` prints a provider heading with the session count, a blank line, then one line per session in `ID · date/time (message count) · title` format. Sessions are sorted newest first, dates use the system locale and timezone, and paths are omitted. Provider-native titles are shown in full; fallback titles from the first non-empty user-message line are limited to 80 characters by default. `asm list --full-name` removes that limit.
+`asm list <provider>` prints a provider heading with the session count, a blank line, then one line per session in `ID · date/time (message count) · title` format. Sessions are sorted newest first, dates use the system locale and timezone, and paths are omitted. The title is truncated as needed so the row fits within the terminal width minus one column; truncated titles end in `...`. If the width cannot be detected, 80 columns are assumed. `asm list --full-name` disables truncation.
 
 If an output already exists, the CLI asks whether to replace it. Answer `y` or `yes` to continue; any other answer cancels. Use `-y` or `--yes` to automatically confirm interactive prompts, including file-overwrite confirmation; in non-interactive scripts it skips the prompt and overwrites existing outputs.
 

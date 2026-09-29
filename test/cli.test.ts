@@ -3,6 +3,7 @@ import { PassThrough, Readable } from 'node:stream';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import stringWidth from 'string-width';
 import { runCli, type CliIO } from '../src/cli.js';
 import { MessageExtractor } from '../src/extractors.js';
 import { listSessions, loadSession } from '../src/session-storages.js';
@@ -29,12 +30,15 @@ async function tempDirectory(): Promise<string> {
   return root;
 }
 
-function createIO(answer = '', interactive = false): { io: CliIO; output: () => string } {
+function createIO(answer = '', interactive = false, columns?: number): { io: CliIO; output: () => string } {
   const input = Readable.from(answer ? [answer] : []);
   const output = new PassThrough();
   let outputText = '';
   output.on('data', (chunk: Buffer) => { outputText += chunk.toString(); });
-  return { io: { input, output, interactive }, output: () => outputText };
+  return {
+    io: { input, output, interactive, ...(columns !== undefined ? { columns } : {}) },
+    output: () => outputText,
+  };
 }
 
 function formatSystemDateTime(timestamp: string): string {
@@ -198,15 +202,18 @@ describe('CLI conversion write modes', () => {
     await writeClaudeSession(claudeHome, olderId, olderTime, 'An older session title');
     await writeClaudeSession(claudeHome, newerId, newerTime, newerTitle);
 
-    const io = createIO();
+    const terminalWidth = 180;
+    const io = createIO('', false, terminalWidth);
     await runCli(['list', 'claude'], io.io);
 
-    expect(io.output().trim().split('\n')).toEqual([
-      'Claude Code sessions (2):',
-      '',
-      `${newerId} · ${formatSystemDateTime(newerTime)} (1 message) · ${newerTitle.split(/\r?\n/, 1)[0]?.slice(0, 80)}`,
-      `${olderId} · ${formatSystemDateTime(olderTime)} (1 message) · An older session title`,
-    ]);
+    const lines = io.output().trim().split('\n');
+    expect(lines[0]).toBe('Claude Code sessions (2):');
+    expect(lines[1]).toBe('');
+    expect(lines[2]?.startsWith(`${newerId} · ${formatSystemDateTime(newerTime)} (1 message) · `)).toBe(true);
+    expect(stringWidth(lines[2] ?? '')).toBeLessThanOrEqual(terminalWidth - 1);
+    expect(lines[2]?.endsWith('...')).toBe(true);
+    expect(lines[2]).not.toContain(newerTitle.split(/\r?\n/, 1)[0] ?? '');
+    expect(lines[3]).toBe(`${olderId} · ${formatSystemDateTime(olderTime)} (1 message) · An older session title`);
     expect(io.output()).not.toContain(claudeHome);
   });
 
@@ -221,13 +228,19 @@ describe('CLI conversion write modes', () => {
       expectedTitle,
     ]);
 
-    const io = createIO();
+    const terminalWidth = 100;
+    const io = createIO('', false, terminalWidth);
     await runCli(['list', 'claude'], io.io);
 
-    expect(io.output()).toContain(
-      `${id} · ${formatSystemDateTime(timestamp)} (1 message) · ${expectedTitle}`,
-    );
+    const row = io.output().trim().split('\n')[2] ?? '';
+    expect(row.startsWith(`${id} · ${formatSystemDateTime(timestamp)} (1 message) · `)).toBe(true);
+    expect(row.endsWith('...')).toBe(true);
+    expect(row).not.toContain(expectedTitle);
     expect(io.output()).not.toContain('Fallback first user message');
+
+    const fullNameIO = createIO('', false, terminalWidth);
+    await runCli(['list', 'claude', '--full-name'], fullNameIO.io);
+    expect(fullNameIO.output()).toContain(expectedTitle);
   });
 
   it('prints full fallback titles with --full-name', async () => {
@@ -238,12 +251,15 @@ describe('CLI conversion write modes', () => {
     const fullTitle = 'A long fallback title '.repeat(8).trim();
     await writeClaudeSession(claudeHome, id, timestamp, fullTitle);
 
-    const defaultIO = createIO();
+    const terminalWidth = 100;
+    const defaultIO = createIO('', false, terminalWidth);
     await runCli(['list', 'claude'], defaultIO.io);
-    expect(defaultIO.output()).toContain(fullTitle.slice(0, 80));
-    expect(defaultIO.output()).not.toContain(fullTitle);
+    const defaultRow = defaultIO.output().trim().split('\n')[2] ?? '';
+    expect(stringWidth(defaultRow)).toBeLessThanOrEqual(terminalWidth - 1);
+    expect(defaultRow.endsWith('...')).toBe(true);
+    expect(defaultRow).not.toContain(fullTitle);
 
-    const fullNameIO = createIO();
+    const fullNameIO = createIO('', false, terminalWidth);
     await runCli(['list', 'claude', '--full-name'], fullNameIO.io);
     expect(fullNameIO.output()).toContain(fullTitle);
   });

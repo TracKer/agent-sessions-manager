@@ -4,6 +4,7 @@ import { stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { Argument, CommanderError, Command } from 'commander';
+import stringWidth from 'string-width';
 import { planConversion, writeConversion } from './converter.js';
 import { defaultHome } from './paths.js';
 import { listSessions } from './session-storages.js';
@@ -13,6 +14,7 @@ export interface CliIO {
   input: NodeJS.ReadableStream;
   output: NodeJS.WritableStream;
   interactive: boolean;
+  columns?: number;
 }
 
 interface ConvertOptions {
@@ -24,6 +26,8 @@ interface ConvertOptions {
 interface ListOptions {
   fullName?: boolean;
 }
+
+const titleSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 const defaultIO: CliIO = {
   input: process.stdin,
@@ -47,16 +51,19 @@ export async function runCli(args: string[], io: CliIO = defaultIO): Promise<num
     .command('list')
     .description('List sessions for a provider')
     .addArgument(new Argument('<provider>', 'provider whose sessions to list').choices(PROVIDERS))
-    .option('--full-name', 'Show complete session titles without truncating fallback titles')
+    .option('--full-name', 'Show complete session titles even when they exceed terminal width')
     .action(async (providerName: string, options: ListOptions) => {
       const provider = parseProvider(providerName);
-      const sessions = await listSessions(provider, defaultHome(provider), {
-        fullName: options.fullName === true,
-      });
+      const sessions = await listSessions(provider, defaultHome(provider), { fullName: true });
+      const terminalWidth = io.columns ?? process.stdout.columns ?? 80;
       io.output.write(`${providerLabel(provider)} sessions (${sessions.length}):\n\n`);
       for (const session of sessions) {
         const messageLabel = session.messageCount === 1 ? 'message' : 'messages';
-        io.output.write(`${session.sessionId} · ${formatDateTime(session.timestamp)} (${session.messageCount} ${messageLabel}) · ${session.title}\n`);
+        const prefix = `${session.sessionId} · ${formatDateTime(session.timestamp)} (${session.messageCount} ${messageLabel}) · `;
+        const title = options.fullName
+          ? session.title
+          : truncateToTerminalWidth(session.title, terminalWidth - 1 - stringWidth(prefix));
+        io.output.write(`${prefix}${title}\n`);
       }
     });
 
@@ -144,6 +151,21 @@ function formatDateTime(value: string): string {
   const formattedDate = date.toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' });
   const formattedTime = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   return `${formattedDate} ${formattedTime}`;
+}
+
+function truncateToTerminalWidth(value: string, maxWidth: number): string {
+  if (stringWidth(value) <= maxWidth) return value;
+  const ellipsis = '...';
+  const maxContentWidth = Math.max(0, maxWidth - stringWidth(ellipsis));
+  let result = '';
+  let width = 0;
+  for (const { segment } of titleSegmenter.segment(value)) {
+    const segmentWidth = stringWidth(segment);
+    if (width + segmentWidth > maxContentWidth) break;
+    result += segment;
+    width += segmentWidth;
+  }
+  return `${result}${ellipsis}`;
 }
 
 async function existingPaths(destinations: string[]): Promise<string[]> {
