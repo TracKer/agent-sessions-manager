@@ -1,0 +1,47 @@
+# Agent Sessions Manager
+
+A command-line application for listing and converting AI coding-agent sessions.
+
+## Current scope
+
+Session listing and text-history conversion are supported between four clients:
+
+- OpenAI Codex (`codex`)
+- Pi (`pi`)
+- OpenCode export JSON (`opencode`)
+- Claude Code (`claude`)
+
+The shared message model preserves user/assistant text, timestamps, model metadata where available, compaction summaries, and filters known Codex contextual prompts. It focuses on session text and compaction data rather than replaying tool calls/results, approval state, sandbox state, MCP events, or reasoning.
+
+Conversions targeting Pi also write the default Pi DCP session-state file under `~/.pi-dcp`. The CLI uses each provider's default paths. Trace export, search/indexing, and MCP features are not implemented.
+
+## Requirements
+
+- Node.js 20+
+- npm
+
+## Development
+
+```sh
+npm install
+npm run typecheck
+npm test
+npm run build
+```
+
+## CLI
+
+All paths default to the corresponding local application directory. Conversions write by default; use `--dry` to preview without writing.
+
+```sh
+asm list codex
+asm convert codex pi <session-id>
+asm convert codex pi <session-id> --dry
+asm convert opencode claude <session-id>
+```
+
+`asm list <provider>` prints a provider heading with the session count, a blank line, then one line per session in `ID · date/time (message count) · title` format. Sessions are sorted newest first, dates use the system locale and timezone, and paths are omitted. Provider-native titles are shown in full; fallback titles from the first non-empty user-message line are limited to 80 characters.
+
+If an output already exists, the CLI asks whether to replace it. Answer `y` or `yes` to continue; any other answer cancels. Use `-y` or `--yes` to automatically confirm interactive prompts, including file-overwrite confirmation; in non-interactive scripts it skips the prompt and overwrites existing outputs.
+
+Session counts use provider-native message records rather than extracted text. Compaction records are included where they are stored separately.

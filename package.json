@@ -1,0 +1,30 @@
+{
+  "name": "agent-sessions-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CLI for listing and converting AI coding-agent sessions.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "asm": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepack": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}
