@@ -211,7 +211,7 @@ describe('CLI conversion write modes', () => {
     expect(lines[1]).toBe('');
     expect(lines[2]?.startsWith(`${newerId} · ${formatSystemDateTime(newerTime)} (1 message) · `)).toBe(true);
     expect(stringWidth(lines[2] ?? '')).toBeLessThanOrEqual(terminalWidth - 1);
-    expect(lines[2]?.endsWith('...')).toBe(true);
+    expect(lines[2]?.endsWith('…')).toBe(true);
     expect(lines[2]).not.toContain(newerTitle.split(/\r?\n/, 1)[0] ?? '');
     expect(lines[3]).toBe(`${olderId} · ${formatSystemDateTime(olderTime)} (1 message) · An older session title`);
     expect(io.output()).not.toContain(claudeHome);
@@ -234,7 +234,7 @@ describe('CLI conversion write modes', () => {
 
     const row = io.output().trim().split('\n')[2] ?? '';
     expect(row.startsWith(`${id} · ${formatSystemDateTime(timestamp)} (1 message) · `)).toBe(true);
-    expect(row.endsWith('...')).toBe(true);
+    expect(row.endsWith('…')).toBe(true);
     expect(row).not.toContain(expectedTitle);
     expect(io.output()).not.toContain('Fallback first user message');
 
@@ -256,7 +256,7 @@ describe('CLI conversion write modes', () => {
     await runCli(['list', 'claude'], defaultIO.io);
     const defaultRow = defaultIO.output().trim().split('\n')[2] ?? '';
     expect(stringWidth(defaultRow)).toBeLessThanOrEqual(terminalWidth - 1);
-    expect(defaultRow.endsWith('...')).toBe(true);
+    expect(defaultRow.endsWith('…')).toBe(true);
     expect(defaultRow).not.toContain(fullTitle);
 
     const fullNameIO = createIO('', false, terminalWidth);

@@ -155,7 +155,7 @@ function formatDateTime(value: string): string {
 
 function truncateToTerminalWidth(value: string, maxWidth: number): string {
   if (stringWidth(value) <= maxWidth) return value;
-  const ellipsis = '...';
+  const ellipsis = '…';
   const maxContentWidth = Math.max(0, maxWidth - stringWidth(ellipsis));
   let result = '';
   let width = 0;
