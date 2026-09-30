@@ -162,9 +162,10 @@ export class MessageExtractor {
     for (const record of session.records) {
       const type = stringValue(record, 'type');
       const timestamp = stringValue(record, 'timestamp') ?? session.timestamp;
+      const isMeta = record.isMeta === true ? { isMeta: true } : {};
       if (type === 'system' && record.subtype === 'compact_boundary') {
         const summary = stringValue(record, 'content');
-        if (summary) messages.push({ role: 'user', text: summary, timestamp, isCompaction: true });
+        if (summary) messages.push({ role: 'user', text: summary, timestamp, isCompaction: true, ...isMeta });
         continue;
       }
       if (type !== 'user' && type !== 'assistant') continue;
@@ -175,10 +176,10 @@ export class MessageExtractor {
       const text = contentToText(message.content);
       if (!text) continue;
       if (record.isCompactSummary === true) {
-        messages.push({ role: 'user', text, timestamp, isCompaction: true });
+        messages.push({ role: 'user', text, timestamp, isCompaction: true, ...isMeta });
       } else {
         const model = stringValue(message, 'model');
-        messages.push({ role, text, timestamp, ...(model ? { model } : {}) });
+        messages.push({ role, text, timestamp, ...(model ? { model } : {}), ...isMeta });
       }
     }
     return messages;

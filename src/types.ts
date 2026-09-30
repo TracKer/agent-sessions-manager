@@ -19,6 +19,7 @@ export interface TextMessage {
   model?: string;
   provider?: string;
   api?: string;
+  isMeta?: boolean;
   isCompaction?: boolean;
   isContextual?: boolean;
 }

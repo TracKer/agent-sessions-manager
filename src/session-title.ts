@@ -11,6 +11,8 @@ export function formatNativeSessionTitle(value: string | undefined): string | un
 }
 
 export function titleFromMessages(messages: readonly TextMessage[], fullName = false): string | undefined {
-  const firstUserMessage = messages.find((message) => message.role === 'user' && message.text.trim());
+  const firstUserMessage = messages.find((message) => (
+    message.role === 'user' && message.isMeta !== true && message.text.trim()
+  ));
   return formatSessionTitle(firstUserMessage?.text, fullName);
 }
