@@ -4,8 +4,6 @@ export type Provider =
     | 'opencode'
     | 'claude';
 
-export const PROVIDERS: readonly Provider[] = ['codex', 'pi', 'opencode', 'claude'];
-
 export type JsonScalar = string | number | boolean | null;
 export type JsonValue = JsonScalar | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };

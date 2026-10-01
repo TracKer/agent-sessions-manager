@@ -4,7 +4,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planConversion, writeConversion } from '../src/converter.js';
 import { listSessions, loadSession } from '../src/session-storages.js';
-import { encodePiCwd, sanitizeClaudeCwd } from '../src/paths.js';
+import { sanitizeClaudeCwd } from '../src/agents/claude-agent.js';
+import { encodePiCwd } from '../src/agents/pi-agent.js';
 
 const temporaryDirectories: string[] = [];
 

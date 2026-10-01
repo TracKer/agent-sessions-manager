@@ -3,9 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planConversion, writeConversion } from '../src/converter.js';
-import { MessageExtractor } from '../src/extractors.js';
-import { PROVIDERS, type Provider } from '../src/types.js';
-import { loadSession } from '../src/session-storages.js';
+import { AgentRegistry, PROVIDERS } from '../src/agents/agent-registry.js';
+import type { Provider } from '../src/types.js';
 
 const roots: string[] = [];
 const expectedMessages = [
@@ -142,7 +141,6 @@ describe('supported providers', () => {
       },
     ]);
 
-    const extractor = new MessageExtractor();
     const coveredPairs: string[] = [];
     for (const source of PROVIDERS) {
       for (const target of PROVIDERS) {
@@ -157,9 +155,9 @@ describe('supported providers', () => {
 
         expect(plan.messages.map(({ role, text }) => [role, text]), `${source} -> ${target} input`).toEqual(expectedMessages);
         await writeConversion(plan);
-        const imported = await loadSession(target, plan.targetId, targetHome);
+        const imported = await AgentRegistry.get(target).loadSession(plan.targetId, targetHome);
         expect(imported.cwd, `${source} -> ${target} cwd`).toBe('/matrix/work');
-        expect(extractor.extract(imported).map(({ role, text }) => [role, text]), `${source} -> ${target} output`)
+        expect(AgentRegistry.get(target).extractMessages(imported).map(({ role, text }) => [role, text]), `${source} -> ${target} output`)
           .toEqual(expectedMessages);
         coveredPairs.push(`${source}->${target}`);
       }

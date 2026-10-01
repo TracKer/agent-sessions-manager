@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import stringWidth from 'string-width';
 import { runCli, type CliIO } from '../src/cli.js';
-import { MessageExtractor } from '../src/extractors.js';
+import { AgentRegistry } from '../src/agents/agent-registry.js';
 import { listSessions, loadSession } from '../src/session-storages.js';
 
 const roots: string[] = [];
@@ -113,7 +113,8 @@ async function writeClaudeMessages(
 async function convertedTexts(home: string): Promise<string[]> {
   const [session] = await listSessions('claude', home);
   if (!session) return [];
-  return new MessageExtractor().extract(await loadSession('claude', session.sessionId, home)).map((message) => message.text);
+  const loaded = await loadSession('claude', session.sessionId, home);
+  return AgentRegistry.get(loaded.provider).extractMessages(loaded).map((message) => message.text);
 }
 
 function restoreEnvironment(): void {
@@ -266,7 +267,8 @@ describe('CLI conversion write modes', () => {
       { text: userPrompt },
     ]);
 
-    const extracted = new MessageExtractor().extract(await loadSession('claude', id, claudeHome));
+    const session = await loadSession('claude', id, claudeHome);
+    const extracted = AgentRegistry.get(session.provider).extractMessages(session);
     expect(extracted.map((message) => message.text)).toEqual([commandCaveat, userPrompt]);
     expect(extracted[0]?.isMeta).toBe(true);
 

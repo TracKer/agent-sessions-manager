@@ -5,10 +5,9 @@ import {createInterface} from 'node:readline/promises';
 import {fileURLToPath} from 'node:url';
 import {Argument, Command, CommanderError} from 'commander';
 import stringWidth from 'string-width';
+import {AgentRegistry, PROVIDERS} from './agents/agent-registry.js';
 import {planConversion, writeConversion} from './converter.js';
-import {defaultHome} from './paths.js';
-import {listSessions} from './session-storages.js';
-import {type Provider, PROVIDERS} from './types.js';
+import {type Provider} from './types.js';
 
 export interface CliIO {
     input: NodeJS.ReadableStream;
@@ -57,9 +56,10 @@ export async function runCli(args: string[], io: CliIO = defaultIO): Promise<num
         .option('--full-name', 'Show complete session titles even when they exceed terminal width')
         .action(async (providerName: string, options: ListOptions) => {
             const provider = parseProvider(providerName);
-            const sessions = await listSessions(provider, defaultHome(provider), {fullName: true});
+            const agent = AgentRegistry.get(provider);
+            const sessions = await agent.listSessions(undefined, {fullName: true});
             const terminalWidth = io.columns ?? process.stdout.columns ?? 80;
-            io.output.write(`${providerLabel(provider)} sessions (${sessions.length}):\n\n`);
+            io.output.write(`${agent.label} sessions (${sessions.length}):\n\n`);
             for (const session of sessions) {
                 const messageLabel = session.messageCount === 1 ? 'message' : 'messages';
                 const prefix = `${session.sessionId} · ${formatDateTime(session.timestamp)} (${session.messageCount} ${messageLabel}) · `;
@@ -132,19 +132,6 @@ function parseProvider(value: string): Provider {
     const provider = PROVIDERS.find((candidate) => candidate === value);
     if (provider) return provider;
     throw new Error(`Provider must be one of: ${PROVIDERS.join(', ')}`);
-}
-
-function providerLabel(provider: Provider): string {
-    switch (provider) {
-        case 'codex':
-            return 'OpenAI Codex';
-        case 'pi':
-            return 'Pi';
-        case 'opencode':
-            return 'OpenCode';
-        case 'claude':
-            return 'Claude Code';
-    }
 }
 
 function formatDateTime(value: string): string {
