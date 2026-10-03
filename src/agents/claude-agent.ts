@@ -50,6 +50,10 @@ export class ClaudeAgent extends AbstractAgent {
     return undefined;
   }
 
+  protected messagesForSessionTitle(session: NativeSession): TextMessage[] {
+    return this.extractMessages(session).filter((message) => message.isMeta !== true);
+  }
+
   protected summaryTimestamp(session: NativeSession): string {
     let latestValue: string | undefined;
     let latestInstant = Number.NEGATIVE_INFINITY;

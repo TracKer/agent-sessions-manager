@@ -47,6 +47,10 @@ export abstract class AbstractAgent {
     return undefined;
   }
 
+  protected messagesForSessionTitle(session: NativeSession): TextMessage[] {
+    return this.extractMessages(session);
+  }
+
   protected summaryTimestamp(session: NativeSession): string {
     return session.timestamp;
   }
@@ -61,6 +65,12 @@ export abstract class AbstractAgent {
 
   buildServices(_sessionId: string, _options: AgentConversionOptions): ConversionService[] {
     return [];
+  }
+
+  buildSessionTitle(session: NativeSession, options: AgentListOptions = {}): string {
+    return formatNativeSessionTitle(this.nativeTitle(session))
+      ?? titleFromMessages(this.messagesForSessionTitle(session), options.fullName === true)
+      ?? 'Untitled session';
   }
 
   async readSession(filePath: string): Promise<NativeSession> {
@@ -81,13 +91,10 @@ export abstract class AbstractAgent {
     for (const filePath of await this.sessionFiles(home)) {
       try {
         const session = await this.readSession(filePath);
-        const title = formatNativeSessionTitle(this.nativeTitle(session))
-          ?? titleFromMessages(this.extractMessages(session), options.fullName === true)
-          ?? 'Untitled session';
         summaries.push({
           provider: this.provider,
           sessionId: session.sessionId,
-          title,
+          title: this.buildSessionTitle(session, options),
           cwd: session.cwd,
           timestamp: this.summaryTimestamp(session),
           path: filePath,
