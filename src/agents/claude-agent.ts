@@ -3,8 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import type {JsonObject, JsonValue, NativeSession, TextMessage} from '../types.js';
 import {asObject, contentToText, stringValue} from '../json.js';
-import {formatNativeSessionTitle, titleFromMessages} from '../session-title.js';
+import {formatNativeSessionTitle, formatSessionTitle} from '../session-title.js';
 import {AbstractAgent, type AgentListOptions} from './abstract-agent.js';
+
+const claudeCommandTags = /<(local-command-caveat|local-command-stdout|command-name|command-message|command-args)>[\s\S]*?<\/\1>/g;
 
 export class ClaudeAgent extends AbstractAgent {
     readonly provider = 'claude' as const;
@@ -23,12 +25,23 @@ export class ClaudeAgent extends AbstractAgent {
         const nativeTitle = formatNativeSessionTitle(this.nativeTitle(session));
         if (nativeTitle) return nativeTitle;
 
-        const messages = this.extractMessages(session).filter((message) => message.isMeta !== true);
-        return titleFromMessages(messages, options.fullName === true) ?? 'Untitled session';
+        for (const message of this.iterateMessages(session)) {
+            if (message.role !== 'user') continue;
+            const title = formatSessionTitle(
+                message.text.replace(claudeCommandTags, '').trim(),
+                options.fullName === true,
+            );
+            if (title) return title;
+        }
+        return 'Untitled session';
     }
 
     extractMessages(session: NativeSession): TextMessage[] {
-        return this.extractor.extract(session);
+        return [...this.iterateMessages(session)];
+    }
+
+    protected iterateMessages(session: NativeSession): Iterable<TextMessage> {
+        return this.extractor.iterate(session);
     }
 
     countMessages(session: NativeSession): number {
@@ -101,15 +114,14 @@ export class ClaudeAgent extends AbstractAgent {
 }
 
 class ClaudeMessageExtractor {
-    extract(session: NativeSession): TextMessage[] {
-        const messages: TextMessage[] = [];
+    *iterate(session: NativeSession): Generator<TextMessage> {
         for (const record of session.records) {
             const type = stringValue(record, 'type');
             const timestamp = stringValue(record, 'timestamp') ?? session.timestamp;
             const meta = record.isMeta === true ? {isMeta: true} : {};
             if (type === 'system' && record.subtype === 'compact_boundary') {
                 const summary = stringValue(record, 'content');
-                if (summary) messages.push({role: 'user', text: summary, timestamp, isCompaction: true, ...meta});
+                if (summary) yield {role: 'user', text: summary, timestamp, isCompaction: true, ...meta};
                 continue;
             }
             if (type !== 'user' && type !== 'assistant') continue;
@@ -120,13 +132,12 @@ class ClaudeMessageExtractor {
             const text = contentToText(message.content);
             if (!text) continue;
             if (record.isCompactSummary === true) {
-                messages.push({role: 'user', text, timestamp, isCompaction: true, ...meta});
+                yield {role: 'user', text, timestamp, isCompaction: true, ...meta};
             } else {
                 const model = stringValue(message, 'model');
-                messages.push({role, text, timestamp, ...(model ? {model} : {}), ...meta});
+                yield {role, text, timestamp, ...(model ? {model} : {}), ...meta};
             }
         }
-        return messages;
     }
 }
 

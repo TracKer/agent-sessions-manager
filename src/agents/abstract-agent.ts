@@ -4,7 +4,7 @@ import path from 'node:path';
 import type {ConversionService, JsonObject, NativeSession, Provider, SessionSummary, TextMessage,} from '../types.js';
 import {asObject} from '../json.js';
 import {readJsonl, writeJson, writeJsonl} from '../jsonl.js';
-import {formatNativeSessionTitle, titleFromMessages} from '../session-title.js';
+import {formatNativeSessionTitle, formatSessionTitle} from '../session-title.js';
 
 export type AgentStorageFormat = 'json' | 'jsonl';
 
@@ -43,9 +43,15 @@ export abstract class AbstractAgent {
     }
 
     getSessionTitle(session: NativeSession, options: AgentListOptions = {}): string {
-        return formatNativeSessionTitle(this.nativeTitle(session))
-            ?? titleFromMessages(this.extractMessages(session), options.fullName === true)
-            ?? 'Untitled session';
+        const nativeTitle = formatNativeSessionTitle(this.nativeTitle(session));
+        if (nativeTitle) return nativeTitle;
+
+        for (const message of this.iterateMessages(session)) {
+            if (message.role !== 'user') continue;
+            const title = formatSessionTitle(message.text, options.fullName === true);
+            if (title) return title;
+        }
+        return 'Untitled session';
     }
 
     async readSession(filePath: string): Promise<NativeSession> {
@@ -123,6 +129,10 @@ export abstract class AbstractAgent {
 
     protected normalizeRecords(records: JsonObject[]): JsonObject[] {
         return records;
+    }
+
+    protected iterateMessages(session: NativeSession): Iterable<TextMessage> {
+        return this.extractMessages(session);
     }
 
     private async readRecords(filePath: string): Promise<{ records: JsonObject[]; modified: string }> {

@@ -25,7 +25,11 @@ export class OpenCodeAgent extends AbstractAgent {
     }
 
     extractMessages(session: NativeSession): TextMessage[] {
-        return this.extractor.extract(session);
+        return [...this.iterateMessages(session)];
+    }
+
+    protected iterateMessages(session: NativeSession): Iterable<TextMessage> {
+        return this.extractor.iterate(session);
     }
 
     countMessages(session: NativeSession): number {
@@ -73,10 +77,9 @@ export class OpenCodeAgent extends AbstractAgent {
 }
 
 class OpenCodeMessageExtractor {
-    extract(session: NativeSession): TextMessage[] {
+    *iterate(session: NativeSession): Generator<TextMessage> {
         const exportObject = session.records[0];
         const rawMessages = exportObject ? asArray(exportObject.messages) ?? [] : [];
-        const messages: TextMessage[] = [];
         for (const raw of rawMessages) {
             const message = asObject(raw);
             const info = message ? asObject(message.info) : undefined;
@@ -92,22 +95,21 @@ class OpenCodeMessageExtractor {
             const created = time ? numberValue(time, 'created') : undefined;
             const timestamp = created === undefined ? session.timestamp : epochMsToIso(created);
             if (info.summary === true && role === 'assistant' && text) {
-                messages.push({role: 'user', text, timestamp, isCompaction: true});
+                yield {role: 'user', text, timestamp, isCompaction: true};
                 continue;
             }
             if (!text) continue;
             const modelObject = asObject(info.model);
             const model = stringValue(info, 'modelID') ?? (modelObject ? stringValue(modelObject, 'modelID') : undefined);
             const provider = stringValue(info, 'providerID') ?? (modelObject ? stringValue(modelObject, 'providerID') : undefined);
-            messages.push({
+            yield {
                 role,
                 text,
                 timestamp,
                 ...(model !== undefined ? {model} : {}),
                 ...(provider !== undefined ? {provider} : {}),
-            });
+            };
         }
-        return messages;
     }
 }
 

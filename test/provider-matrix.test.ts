@@ -143,6 +143,10 @@ describe('supported providers', () => {
 
     const coveredPairs: string[] = [];
     for (const source of PROVIDERS) {
+      const sourceAgent = AgentRegistry.get(source);
+      const sourceSession = await sourceAgent.loadSession(fixtures[source].sessionId, fixtures[source].home);
+      expect(sourceAgent.getSessionTitle(sourceSession), `${source} session title`).toBe('Matrix prompt');
+
       for (const target of PROVIDERS) {
         if (source === target) continue;
         const sourceFixture = fixtures[source];

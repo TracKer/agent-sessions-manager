@@ -47,7 +47,11 @@ export class CodexAgent extends AbstractAgent {
     }
 
     extractMessages(session: NativeSession): TextMessage[] {
-        return this.extractor.extract(session);
+        return [...this.iterateMessages(session)];
+    }
+
+    protected iterateMessages(session: NativeSession): Iterable<TextMessage> {
+        return this.extractor.iterate(session);
     }
 
     countMessages(session: NativeSession): number {
@@ -132,29 +136,27 @@ export class CodexAgent extends AbstractAgent {
 }
 
 class CodexMessageExtractor {
-    extract(session: NativeSession): TextMessage[] {
-        const messages: TextMessage[] = [];
+    *iterate(session: NativeSession): Generator<TextMessage> {
         for (const record of session.records) {
             const timestamp = stringValue(record, 'timestamp') ?? session.timestamp;
             if (record.type === 'compacted') {
                 const payload = asObject(record.payload);
                 const summary = payload ? stringValue(payload, 'message') : undefined;
-                if (summary) messages.push({role: 'user', text: summary, timestamp, isCompaction: true});
+                if (summary) yield {role: 'user', text: summary, timestamp, isCompaction: true};
                 const replacement = payload ? asArray(payload.replacement_history) : undefined;
                 for (const item of replacement ?? []) {
                     const object = asObject(item);
                     if (object?.type !== 'message') continue;
                     const message = this.codexMessage(object, timestamp);
-                    if (message) messages.push(message);
+                    if (message) yield message;
                 }
                 continue;
             }
             const payload = asObject(record.payload);
             if (payload?.type !== 'message') continue;
             const message = this.codexMessage(payload, timestamp);
-            if (message) messages.push(message);
+            if (message) yield message;
         }
-        return messages;
     }
 
     private codexMessage(payload: JsonObject, timestamp: string): TextMessage | undefined {

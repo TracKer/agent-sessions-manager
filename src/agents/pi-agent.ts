@@ -19,7 +19,11 @@ export class PiAgent extends AbstractAgent {
     }
 
     extractMessages(session: NativeSession): TextMessage[] {
-        return this.extractor.extract(session);
+        return [...this.iterateMessages(session)];
+    }
+
+    protected iterateMessages(session: NativeSession): Iterable<TextMessage> {
+        return this.extractor.iterate(session);
     }
 
     countMessages(session: NativeSession): number {
@@ -84,8 +88,7 @@ export class PiAgent extends AbstractAgent {
 }
 
 class PiMessageExtractor {
-    extract(session: NativeSession): TextMessage[] {
-        const messages: TextMessage[] = [];
+    *iterate(session: NativeSession): Generator<TextMessage> {
         let currentProvider: string | undefined;
         let currentModel: string | undefined;
         for (const record of session.records) {
@@ -96,12 +99,12 @@ class PiMessageExtractor {
             }
             if (record.type === 'compaction') {
                 const text = stringValue(record, 'summary');
-                if (text) messages.push({
+                if (text) yield {
                     role: 'user',
                     text,
                     timestamp: stringValue(record, 'timestamp') ?? session.timestamp,
                     isCompaction: true,
-                });
+                };
                 continue;
             }
             if (record.type !== 'message') continue;
@@ -114,16 +117,15 @@ class PiMessageExtractor {
             const model = stringValue(message, 'model') ?? currentModel;
             const provider = stringValue(message, 'provider') ?? currentProvider;
             const api = stringValue(message, 'api');
-            messages.push({
+            yield {
                 role: sourceRole === 'system' ? 'user' : sourceRole as TextMessage['role'],
                 text,
                 timestamp: stringValue(record, 'timestamp') ?? stringValue(message, 'timestamp') ?? session.timestamp,
                 ...(model !== undefined ? {model} : {}),
                 ...(provider !== undefined ? {provider} : {}),
                 ...(api !== undefined ? {api} : {}),
-            });
+            };
         }
-        return messages;
     }
 }
 
