@@ -3,7 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { JsonObject, JsonValue, NativeSession, TextMessage } from '../types.js';
 import { asObject, contentToText, stringValue } from '../json.js';
-import { AbstractAgent } from './abstract-agent.js';
+import { formatNativeSessionTitle, titleFromMessages } from '../session-title.js';
+import { AbstractAgent, type AgentListOptions } from './abstract-agent.js';
 
 export class ClaudeAgent extends AbstractAgent {
   readonly provider = 'claude' as const;
@@ -50,8 +51,12 @@ export class ClaudeAgent extends AbstractAgent {
     return undefined;
   }
 
-  protected messagesForSessionTitle(session: NativeSession): TextMessage[] {
-    return this.extractMessages(session).filter((message) => message.isMeta !== true);
+  getSessionTitle(session: NativeSession, options: AgentListOptions = {}): string {
+    const nativeTitle = formatNativeSessionTitle(this.nativeTitle(session));
+    if (nativeTitle) return nativeTitle;
+
+    const messages = this.extractMessages(session).filter((message) => message.isMeta !== true);
+    return titleFromMessages(messages, options.fullName === true) ?? 'Untitled session';
   }
 
   protected summaryTimestamp(session: NativeSession): string {

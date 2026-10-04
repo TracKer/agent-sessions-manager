@@ -47,10 +47,6 @@ export abstract class AbstractAgent {
     return undefined;
   }
 
-  protected messagesForSessionTitle(session: NativeSession): TextMessage[] {
-    return this.extractMessages(session);
-  }
-
   protected summaryTimestamp(session: NativeSession): string {
     return session.timestamp;
   }
@@ -67,9 +63,9 @@ export abstract class AbstractAgent {
     return [];
   }
 
-  buildSessionTitle(session: NativeSession, options: AgentListOptions = {}): string {
+  getSessionTitle(session: NativeSession, options: AgentListOptions = {}): string {
     return formatNativeSessionTitle(this.nativeTitle(session))
-      ?? titleFromMessages(this.messagesForSessionTitle(session), options.fullName === true)
+      ?? titleFromMessages(this.extractMessages(session), options.fullName === true)
       ?? 'Untitled session';
   }
 
@@ -94,7 +90,7 @@ export abstract class AbstractAgent {
         summaries.push({
           provider: this.provider,
           sessionId: session.sessionId,
-          title: this.buildSessionTitle(session, options),
+          title: this.getSessionTitle(session, options),
           cwd: session.cwd,
           timestamp: this.summaryTimestamp(session),
           path: filePath,

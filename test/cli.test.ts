@@ -271,6 +271,7 @@ describe('CLI conversion write modes', () => {
     const extracted = AgentRegistry.get(session.provider).extractMessages(session);
     expect(extracted.map((message) => message.text)).toEqual([commandCaveat, userPrompt]);
     expect(extracted[0]?.isMeta).toBe(true);
+    expect(AgentRegistry.get(session.provider).getSessionTitle(session)).toBe(userPrompt);
 
     const io = createIO('', false, 1000);
     await runCli(['list', 'claude'], io.io);
