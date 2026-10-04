@@ -24,6 +24,7 @@ interface ConvertOptions {
 
 interface ListOptions {
     fullName?: boolean;
+    json?: boolean;
 }
 
 const titleSegmenter = new Intl.Segmenter(undefined, {granularity: 'grapheme'});
@@ -54,10 +55,23 @@ export async function runCli(args: string[], io: CliIO = defaultIO): Promise<num
         .description('List sessions for a provider')
         .addArgument(new Argument('<provider>', 'provider whose sessions to list').choices(PROVIDERS))
         .option('--full-name', 'Show complete session titles even when they exceed terminal width')
+        .option('--json', 'Output complete session summaries as JSON')
         .action(async (providerName: string, options: ListOptions) => {
             const provider = parseProvider(providerName);
             const agent = AgentRegistry.get(provider);
             const sessions = await agent.listSessions(undefined, {fullName: true});
+            if (options.json) {
+                io.output.write(`${JSON.stringify(sessions.map((session) => ({
+                    provider: session.provider,
+                    sessionId: session.sessionId,
+                    title: session.title,
+                    projectPath: session.cwd,
+                    timestamp: session.timestamp,
+                    path: session.path,
+                    messageCount: session.messageCount,
+                })), null, 2)}\n`);
+                return;
+            }
             const terminalWidth = io.columns ?? process.stdout.columns ?? 80;
             io.output.write(`${agent.label} sessions (${sessions.length}):\n\n`);
             for (const session of sessions) {

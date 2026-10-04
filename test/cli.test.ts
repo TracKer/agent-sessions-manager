@@ -229,6 +229,28 @@ describe('CLI conversion write modes', () => {
     expect(io.output()).not.toContain(claudeHome);
   });
 
+  it('prints complete session summaries as JSON with projectPath', async () => {
+    const root = await tempDirectory();
+    const claudeHome = path.join(root, '.claude');
+    const id = '66666666-6666-4666-8666-666666666666';
+    const timestamp = '2026-08-06T10:30:00.000Z';
+    const title = 'A complete session title '.repeat(8).trim();
+    await writeClaudeSession(claudeHome, id, timestamp, title);
+
+    const io = createIO('', false, 40);
+    await runCli(['list', 'claude', '--json'], io.io);
+
+    expect(JSON.parse(io.output())).toEqual([{
+      provider: 'claude',
+      sessionId: id,
+      title,
+      projectPath: '/work/project',
+      timestamp,
+      path: path.join(claudeHome, 'projects', '-work-project', `${id}.jsonl`),
+      messageCount: 1,
+    }]);
+  });
+
   it('prefers the latest Claude customTitle over the first user message', async () => {
     const root = await tempDirectory();
     const claudeHome = path.join(root, '.claude');
