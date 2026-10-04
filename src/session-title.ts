@@ -1,4 +1,4 @@
-import type { TextMessage } from './types.js';
+import type {TextMessage} from './types.js';
 
 export function formatSessionTitle(value: string | undefined, fullName = false): string | undefined {
     const firstLine = value?.trim().split(/\r?\n/, 1)[0]?.trim();

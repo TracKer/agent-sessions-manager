@@ -1,7 +1,7 @@
-import { AgentRegistry } from './agents/agent-registry.js';
-import type { AgentConversionOptions } from './agents/abstract-agent.js';
-import type { ConversionPlan, ConversionService, Provider } from './types.js';
-import { writeJson } from './jsonl.js';
+import {AgentRegistry} from './agents/agent-registry.js';
+import type {AgentConversionOptions} from './agents/abstract-agent.js';
+import type {ConversionPlan, ConversionService, Provider} from './types.js';
+import {writeJson} from './jsonl.js';
 
 export interface PlanOptions {
     sourceHome?: string;
@@ -32,7 +32,7 @@ export async function planConversion(
     );
     const targetHome = options.targetHome ?? targetAgent.defaultHome();
     const agentOptions: AgentConversionOptions = {
-        ...(options.piDcpHome !== undefined ? { piDcpHome: options.piDcpHome } : {}),
+        ...(options.piDcpHome !== undefined ? {piDcpHome: options.piDcpHome} : {}),
     };
     const services: ConversionService[] = targetAgent.buildServices(targetId, agentOptions);
     return {
