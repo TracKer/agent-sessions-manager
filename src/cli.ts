@@ -59,7 +59,7 @@ export async function runCli(args: string[], io: CliIO = defaultIO): Promise<num
         .action(async (providerName: string, options: ListOptions) => {
             const provider = parseProvider(providerName);
             const agent = AgentRegistry.get(provider);
-            const sessions = await agent.listSessions(undefined, {fullName: true});
+            const sessions = await agent.listSessions();
             if (options.json) {
                 io.output.write(`${JSON.stringify(sessions.map((session) => ({
                     provider: session.provider,

@@ -1,13 +1,8 @@
-import type {AgentListOptions} from './agents/abstract-agent.js';
 import {AgentRegistry} from './agents/agent-registry.js';
 import type {NativeSession, Provider, SessionSummary} from './types.js';
 
-export function listSessions(
-    provider: Provider,
-    home?: string,
-    options: AgentListOptions = {},
-): Promise<SessionSummary[]> {
-    return AgentRegistry.get(provider).listSessions(home, options);
+export function listSessions(provider: Provider, home?: string): Promise<SessionSummary[]> {
+    return AgentRegistry.get(provider).listSessions(home);
 }
 
 export function loadSession(

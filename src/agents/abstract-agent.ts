@@ -8,10 +8,6 @@ import {formatNativeSessionTitle, formatSessionTitle} from '../session-title.js'
 
 export type AgentStorageFormat = 'json' | 'jsonl';
 
-export interface AgentListOptions {
-    fullName?: boolean;
-}
-
 export interface AgentConversionOptions {
     piDcpHome?: string;
 }
@@ -42,13 +38,13 @@ export abstract class AbstractAgent {
         return [];
     }
 
-    getSessionTitle(session: NativeSession, options: AgentListOptions = {}): string {
+    getSessionTitle(session: NativeSession): string {
         const nativeTitle = formatNativeSessionTitle(this.nativeTitle(session));
         if (nativeTitle) return nativeTitle;
 
         for (const message of this.iterateMessages(session)) {
             if (message.role !== 'user') continue;
-            const title = formatSessionTitle(message.text, options.fullName === true);
+            const title = formatSessionTitle(message.text);
             if (title) return title;
         }
         return 'Untitled session';
@@ -64,10 +60,7 @@ export abstract class AbstractAgent {
         };
     }
 
-    async listSessions(
-        home = this.defaultHome(),
-        options: AgentListOptions = {},
-    ): Promise<SessionSummary[]> {
+    async listSessions(home = this.defaultHome()): Promise<SessionSummary[]> {
         const summaries: SessionSummary[] = [];
         for (const filePath of await this.sessionFiles(home)) {
             try {
@@ -75,7 +68,7 @@ export abstract class AbstractAgent {
                 summaries.push({
                     provider: this.provider,
                     sessionId: session.sessionId,
-                    title: this.getSessionTitle(session, options),
+                    title: this.getSessionTitle(session),
                     cwd: session.cwd,
                     timestamp: this.summaryTimestamp(session),
                     path: filePath,
