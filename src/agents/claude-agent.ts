@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import type {JsonObject, JsonValue, NativeSession, TextMessage} from '../types.js';
 import {asObject, contentToText, stringValue} from '../json.js';
-import {formatNativeSessionTitle, formatSessionTitle} from '../session-title.js';
 import {AbstractAgent} from './abstract-agent.js';
 
 const claudeCommandTags = /<(local-command-caveat|local-command-stdout|command-name|command-message|command-args)>[\s\S]*?<\/\1>/g;
@@ -21,16 +20,8 @@ export class ClaudeAgent extends AbstractAgent {
         return process.env.CLAUDE_CONFIG_DIR || path.join(home, '.claude');
     }
 
-    getSessionTitle(session: NativeSession): string {
-        const nativeTitle = formatNativeSessionTitle(this.nativeTitle(session));
-        if (nativeTitle) return nativeTitle;
-
-        for (const message of this.iterateMessages(session)) {
-            if (message.role !== 'user') continue;
-            const title = formatSessionTitle(message.text.replace(claudeCommandTags, '').trim());
-            if (title) return title;
-        }
-        return 'Untitled session';
+    protected titleText(message: TextMessage): string {
+        return message.text.replace(claudeCommandTags, '').trim();
     }
 
     extractMessages(session: NativeSession): TextMessage[] {

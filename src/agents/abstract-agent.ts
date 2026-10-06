@@ -44,7 +44,7 @@ export abstract class AbstractAgent {
 
         for (const message of this.iterateMessages(session)) {
             if (message.role !== 'user') continue;
-            const title = formatSessionTitle(message.text);
+            const title = formatSessionTitle(this.titleText(message));
             if (title) return title;
         }
         return 'Untitled session';
@@ -119,6 +119,11 @@ export abstract class AbstractAgent {
 
     protected nativeTitle(_session: NativeSession): string | undefined {
         return undefined;
+    }
+
+    /** Text of a user message to consider for a fallback title, before first-line formatting. */
+    protected titleText(message: TextMessage): string {
+        return message.text;
     }
 
     /** Session id a file name implies, used only to try likely files first; records stay authoritative. */
