@@ -264,3 +264,24 @@ describe('session conversion', () => {
     });
   });
 });
+
+describe('session lookup', () => {
+  it('finds a session whose records disagree with its file name', async () => {
+    const root = await tempDir();
+    const claudeHome = path.join(root, '.claude');
+    const sessionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const filePath = path.join(claudeHome, 'projects', '-work-project', 'not-the-session-id.jsonl');
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify({
+      type: 'user',
+      sessionId,
+      cwd: '/work/project',
+      timestamp: '2026-06-10T23:23:00.000Z',
+      message: { role: 'user', content: 'renamed on disk' },
+    }) + '\n');
+
+    const session = await loadSession('claude', sessionId, claudeHome);
+    expect(session.sessionId).toBe(sessionId);
+    expect(session.path).toBe(filePath);
+  });
+});

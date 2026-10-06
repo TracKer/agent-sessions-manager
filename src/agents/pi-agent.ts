@@ -71,6 +71,10 @@ export class PiAgent extends AbstractAgent {
         return [path.join(home, 'sessions')];
     }
 
+    protected sessionIdFromPath(filePath: string): string {
+        return path.basename(filePath, '.jsonl').split('_').at(-1) ?? path.basename(filePath);
+    }
+
     protected metadataFor(
         records: JsonObject[],
         filePath: string,
@@ -79,8 +83,7 @@ export class PiAgent extends AbstractAgent {
         const header = records.find((record) => record.type === 'session');
         return {
             sessionId: (header ? stringValue(header, 'id') : undefined)
-                ?? path.basename(filePath, '.jsonl').split('_').at(-1)
-                ?? path.basename(filePath),
+                ?? this.sessionIdFromPath(filePath),
             cwd: (header ? stringValue(header, 'cwd') : undefined) ?? '',
             timestamp: (header ? stringValue(header, 'timestamp') : undefined) ?? fallbackTimestamp,
         };

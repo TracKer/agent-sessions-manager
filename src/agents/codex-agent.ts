@@ -97,9 +97,7 @@ export class CodexAgent extends AbstractAgent {
             ?? (meta ? stringValue(meta, 'timestamp') : undefined)
             ?? (firstRecord ? stringValue(firstRecord, 'timestamp') : undefined)
             ?? fallbackTimestamp;
-        const basename = path.basename(filePath);
-        const fallbackId = basename.match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i)?.[1]
-            ?? path.basename(filePath, '.jsonl');
+        const fallbackId = this.sessionIdFromPath(filePath);
         return {
             sessionId: (payload ? stringValue(payload, 'id') : undefined)
                 ?? (firstRecord ? stringValue(firstRecord, 'id') : undefined)
@@ -109,6 +107,11 @@ export class CodexAgent extends AbstractAgent {
                 ?? '',
             timestamp,
         };
+    }
+
+    protected sessionIdFromPath(filePath: string): string {
+        return path.basename(filePath).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i)?.[1]
+            ?? path.basename(filePath, '.jsonl');
     }
 
     protected normalizeRecords(records: JsonObject[]): JsonObject[] {

@@ -83,8 +83,9 @@ async function writeClaudeSession(
   timestamp: string,
   userText: string,
   customTitles: string[] = [],
+  aiTitles: string[] = [],
 ): Promise<void> {
-  await writeClaudeMessages(home, id, timestamp, [{ text: userText }], customTitles);
+  await writeClaudeMessages(home, id, timestamp, [{ text: userText }], customTitles, aiTitles);
 }
 
 async function writeClaudeMessages(
@@ -93,6 +94,7 @@ async function writeClaudeMessages(
   timestamp: string,
   userMessages: { text: string; isMeta?: boolean }[],
   customTitles: string[] = [],
+  aiTitles: string[] = [],
 ): Promise<void> {
   const filePath = path.join(home, 'projects', '-work-project', `${id}.jsonl`);
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -106,6 +108,7 @@ async function writeClaudeMessages(
       message: { role: 'user', content: text },
     })),
     ...customTitles.map((customTitle) => ({ type: 'custom-title', sessionId: id, customTitle })),
+    ...aiTitles.map((aiTitle) => ({ type: 'ai-title', sessionId: id, aiTitle })),
   ];
   await writeFile(filePath, records.map((record) => JSON.stringify(record)).join('\n') + '\n');
 }
@@ -275,6 +278,27 @@ describe('CLI conversion write modes', () => {
     const fullNameIO = createIO('', false, terminalWidth);
     await runCli(['list', 'claude', '--full-name'], fullNameIO.io);
     expect(fullNameIO.output()).toContain(expectedTitle);
+  });
+
+  it('prefers Claude custom titles over ai titles, and ai titles over message text', async () => {
+    const root = await tempDirectory();
+    const claudeHome = path.join(root, '.claude');
+    const timestamp = '2026-08-07T10:30:00.000Z';
+    const customTitleId = '77777777-7777-4777-8777-777777777777';
+    const aiTitleId = '88888888-8888-4888-8888-888888888888';
+    await writeClaudeSession(claudeHome, customTitleId, timestamp, 'Custom fallback text', [
+      'User-selected title',
+    ], ['AI-generated title']);
+    await writeClaudeSession(claudeHome, aiTitleId, timestamp, 'AI fallback text', [], [
+      'AI-generated title',
+    ]);
+
+    const agent = AgentRegistry.get('claude');
+    const customTitleSession = await loadSession('claude', customTitleId, claudeHome);
+    const aiTitleSession = await loadSession('claude', aiTitleId, claudeHome);
+
+    expect(agent.getSessionTitle(customTitleSession)).toBe('User-selected title');
+    expect(agent.getSessionTitle(aiTitleSession)).toBe('AI-generated title');
   });
 
   it('removes Claude command metadata when choosing a fallback title', async () => {

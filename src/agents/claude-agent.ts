@@ -88,13 +88,18 @@ export class ClaudeAgent extends AbstractAgent {
     }
 
     protected nativeTitle(session: NativeSession): string | undefined {
+        let aiTitle: string | undefined;
         for (let index = session.records.length - 1; index >= 0; index -= 1) {
             const record = session.records[index];
-            if (record?.type !== 'custom-title') continue;
-            const title = stringValue(record, 'customTitle');
-            if (title?.trim()) return title;
+            if (record?.type === 'custom-title') {
+                const title = stringValue(record, 'customTitle');
+                if (title?.trim()) return title;
+            } else if (record?.type === 'ai-title' && aiTitle === undefined) {
+                const title = stringValue(record, 'aiTitle');
+                if (title?.trim()) aiTitle = title;
+            }
         }
-        return undefined;
+        return aiTitle;
     }
 
     protected summaryTimestamp(session: NativeSession): string {

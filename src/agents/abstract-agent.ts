@@ -89,7 +89,12 @@ export abstract class AbstractAgent {
     }
 
     async loadSession(sessionId: string, home = this.defaultHome()): Promise<NativeSession> {
-        for (const filePath of await this.sessionFiles(home)) {
+        const files = await this.sessionFiles(home);
+        const named = new Set(files.filter((filePath) => this.sessionIdFromPath(filePath) === sessionId));
+        const ordered = named.size
+            ? [...named, ...files.filter((filePath) => !named.has(filePath))]
+            : files;
+        for (const filePath of ordered) {
             try {
                 const candidate = await this.readSession(filePath);
                 if (candidate.sessionId === sessionId) return candidate;
@@ -121,6 +126,11 @@ export abstract class AbstractAgent {
 
     protected nativeTitle(_session: NativeSession): string | undefined {
         return undefined;
+    }
+
+    /** Session id a file name implies, used only to try likely files first; records stay authoritative. */
+    protected sessionIdFromPath(filePath: string): string {
+        return path.basename(filePath, this.sessionExtension);
     }
 
     protected summaryTimestamp(session: NativeSession): string {
