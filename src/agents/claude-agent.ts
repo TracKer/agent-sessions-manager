@@ -76,18 +76,8 @@ export class ClaudeAgent extends AbstractAgent {
     }
 
     protected nativeTitle(session: NativeSession): string | undefined {
-        let aiTitle: string | undefined;
-        for (let index = session.records.length - 1; index >= 0; index -= 1) {
-            const record = session.records[index];
-            if (record?.type === 'custom-title') {
-                const title = stringValue(record, 'customTitle');
-                if (title?.trim()) return title;
-            } else if (record?.type === 'ai-title' && aiTitle === undefined) {
-                const title = stringValue(record, 'aiTitle');
-                if (title?.trim()) aiTitle = title;
-            }
-        }
-        return aiTitle;
+        return latestTitle(session.records, 'custom-title', 'customTitle')
+            ?? latestTitle(session.records, 'ai-title', 'aiTitle');
     }
 
     protected summaryTimestamp(session: NativeSession): string {
@@ -193,6 +183,16 @@ class ClaudeRecordBuilder {
         }
         return records;
     }
+}
+
+function latestTitle(records: JsonObject[], type: string, key: string): string | undefined {
+    for (let index = records.length - 1; index >= 0; index -= 1) {
+        const record = records[index];
+        if (!record || stringValue(record, 'type') !== type) continue;
+        const title = stringValue(record, key);
+        if (title?.trim()) return title;
+    }
+    return undefined;
 }
 
 export function sanitizeClaudeCwd(cwd: string): string {
