@@ -5,7 +5,6 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import stringWidth from 'string-width';
 import { runCli, type CliIO } from '../src/cli.js';
-import { AgentRegistry } from '../src/agents/agent-registry.js';
 import { listSessions, loadSession } from '../src/session-storages.js';
 
 const roots: string[] = [];
@@ -117,7 +116,7 @@ async function convertedTexts(home: string): Promise<string[]> {
   const [session] = await listSessions('claude', home);
   if (!session) return [];
   const loaded = await loadSession('claude', session.sessionId, home);
-  return AgentRegistry.get(loaded.provider).extractMessages(loaded).map((message) => message.text);
+  return loaded.messages.map((message) => message.text);
 }
 
 function restoreEnvironment(): void {
@@ -293,12 +292,11 @@ describe('CLI conversion write modes', () => {
       'AI-generated title',
     ]);
 
-    const agent = AgentRegistry.get('claude');
     const customTitleSession = await loadSession('claude', customTitleId, claudeHome);
     const aiTitleSession = await loadSession('claude', aiTitleId, claudeHome);
 
-    expect(agent.getSessionTitle(customTitleSession)).toBe('User-selected title');
-    expect(agent.getSessionTitle(aiTitleSession)).toBe('AI-generated title');
+    expect(customTitleSession.title).toBe('User-selected title');
+    expect(aiTitleSession.title).toBe('AI-generated title');
   });
 
   it('removes Claude command metadata when choosing a fallback title', async () => {
@@ -320,10 +318,9 @@ describe('CLI conversion write modes', () => {
     ]);
 
     const session = await loadSession('claude', id, claudeHome);
-    const extracted = AgentRegistry.get(session.provider).extractMessages(session);
-    expect(extracted.map((message) => message.text)).toEqual([commandMetadata, userPrompt]);
-    expect(extracted[0]?.isMeta).toBe(true);
-    expect(AgentRegistry.get(session.provider).getSessionTitle(session)).toBe(userPrompt);
+    expect(session.messages.map((message) => message.text)).toEqual([commandMetadata, userPrompt]);
+    expect(session.messages[0]?.isMeta).toBe(true);
+    expect(session.title).toBe(userPrompt);
 
     const io = createIO('', false, 1000);
     await runCli(['list', 'claude'], io.io);

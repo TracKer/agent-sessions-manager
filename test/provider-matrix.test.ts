@@ -145,7 +145,7 @@ describe('supported providers', () => {
     for (const source of PROVIDERS) {
       const sourceAgent = AgentRegistry.get(source);
       const sourceSession = await sourceAgent.loadSession(fixtures[source].sessionId, fixtures[source].home);
-      expect(sourceAgent.getSessionTitle(sourceSession), `${source} session title`).toBe('Matrix prompt');
+      expect(sourceSession.title, `${source} session title`).toBe('Matrix prompt');
 
       for (const target of PROVIDERS) {
         if (source === target) continue;
@@ -161,7 +161,7 @@ describe('supported providers', () => {
         await writeConversion(plan);
         const imported = await AgentRegistry.get(target).loadSession(plan.targetId, targetHome);
         expect(imported.cwd, `${source} -> ${target} cwd`).toBe('/matrix/work');
-        expect(AgentRegistry.get(target).extractMessages(imported).map(({ role, text }) => [role, text]), `${source} -> ${target} output`)
+        expect(imported.messages.map(({ role, text }) => [role, text]), `${source} -> ${target} output`)
           .toEqual(expectedMessages);
         coveredPairs.push(`${source}->${target}`);
       }

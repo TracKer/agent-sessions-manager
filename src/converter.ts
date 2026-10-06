@@ -24,7 +24,7 @@ export async function planConversion(
         sessionId,
         options.sourceHome ?? sourceAgent.defaultHome(),
     );
-    const messages = sourceAgent.extractMessages(sourceSession);
+    const messages = sourceSession.messages;
     const targetId = targetAgent.createSessionId(
         options.targetId ?? sourceSession.sessionId,
         sourceSession.timestamp,

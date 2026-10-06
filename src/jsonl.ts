@@ -8,10 +8,12 @@ import {asObject} from './json.js';
 
 const lineFeed = 0x0a;
 
-export async function readJsonl(filePath: string): Promise<JsonObject[]> {
+export async function forEachJsonlRecord(
+    filePath: string,
+    handle: (record: JsonObject) => void,
+): Promise<void> {
     // Decoding per line beats readFile(utf8): a whole-file string costs ~20% more on large sessions.
     const content = await readFile(filePath);
-    const records: JsonObject[] = [];
     let start = 0;
     let line = 0;
     while (start < content.length) {
@@ -21,16 +23,18 @@ export async function readJsonl(filePath: string): Promise<JsonObject[]> {
         start = end + 1;
         line += 1;
         if (!trimmed) continue;
+        let record: JsonObject;
         try {
             const value: unknown = JSON.parse(trimmed);
             const object = asObject(value);
             if (!object) throw new TypeError('record is not a JSON object');
-            records.push(object);
+            record = object;
         } catch (error) {
             process.stderr.write(`warning: skipped invalid JSONL record ${filePath}:${line}: ${String(error)}\n`);
+            continue;
         }
+        handle(record);
     }
-    return records;
 }
 
 export async function writeJsonl(

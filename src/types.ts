@@ -22,13 +22,18 @@ export interface TextMessage {
     isContextual?: boolean;
 }
 
-export interface NativeSession {
+export interface SessionData {
     provider: Provider;
+    path: string;
     sessionId: string;
     cwd: string;
     timestamp: string;
-    path: string;
-    records: JsonObject[];
+    /** Newest record timestamp, used to order lists; falls back to `timestamp`. */
+    latestTimestamp: string;
+    title: string;
+    messageCount: number;
+    /** Populated only when the session was read for conversion. */
+    messages: TextMessage[];
 }
 
 export interface SessionSummary {
@@ -42,7 +47,7 @@ export interface SessionSummary {
 }
 
 export interface ConversionPlan {
-    source: NativeSession;
+    source: SessionData;
     target: Provider;
     targetId: string;
     destination: string;

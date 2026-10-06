@@ -1,9 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import {readdir, readFile, stat} from 'node:fs/promises';
 import path from 'node:path';
-import type {ConversionService, JsonObject, NativeSession, Provider, SessionSummary, TextMessage,} from '../types.js';
-import {asObject} from '../json.js';
-import {readJsonl, writeJson, writeJsonl} from '../jsonl.js';
+import type {ConversionService, JsonObject, Provider, SessionData, SessionSummary, TextMessage,} from '../types.js';
+import {requiredObject} from '../json.js';
+import {forEachJsonlRecord, writeJson, writeJsonl} from '../jsonl.js';
 import {formatNativeSessionTitle, formatSessionTitle} from '../session-title.js';
 
 export type AgentStorageFormat = 'json' | 'jsonl';
@@ -12,7 +12,30 @@ export interface AgentConversionOptions {
     piDcpHome?: string;
 }
 
-type SessionMetadata = Pick<NativeSession, 'sessionId' | 'cwd' | 'timestamp'>;
+export interface AccumulatorOptions {
+    /** Retain extracted messages; conversion needs them, listing does not. */
+    collectMessages: boolean;
+}
+
+export interface AccumulatedSession {
+    sessionId?: string;
+    cwd?: string;
+    timestamp?: string;
+    latestTimestamp?: string;
+    nativeTitle?: string;
+    fallbackTitle?: string;
+    messageCount: number;
+    messages: TextMessage[];
+}
+
+/**
+ * Consumes a session's records one at a time. For `jsonl` stores that is one record per line;
+ * for `json` stores the whole export arrives as a single record.
+ */
+export interface SessionAccumulator {
+    add(record: JsonObject): void;
+    finish(fallbackTimestamp: string): AccumulatedSession;
+}
 
 export abstract class AbstractAgent {
     abstract readonly provider: Provider;
@@ -22,9 +45,7 @@ export abstract class AbstractAgent {
 
     abstract defaultHome(home?: string): string;
 
-    abstract extractMessages(session: NativeSession): TextMessage[];
-
-    abstract countMessages(session: NativeSession): number;
+    abstract createAccumulator(options: AccumulatorOptions): SessionAccumulator;
 
     abstract destinationPath(home: string, sessionId: string, cwd: string, timestamp: string): string;
 
@@ -38,41 +59,19 @@ export abstract class AbstractAgent {
         return [];
     }
 
-    getSessionTitle(session: NativeSession): string {
-        const nativeTitle = formatNativeSessionTitle(this.nativeTitle(session));
-        if (nativeTitle) return nativeTitle;
-
-        for (const message of this.iterateMessages(session)) {
-            if (message.role !== 'user') continue;
-            const title = formatSessionTitle(this.titleText(message));
-            if (title) return title;
-        }
-        return 'Untitled session';
-    }
-
-    async readSession(filePath: string): Promise<NativeSession> {
-        const {records, modified} = await this.readRecords(filePath);
-        return {
-            provider: this.provider,
-            path: filePath,
-            records,
-            ...this.metadataFor(records, filePath, modified),
-        };
-    }
-
     async listSessions(home = this.defaultHome()): Promise<SessionSummary[]> {
         const summaries: SessionSummary[] = [];
         for (const filePath of await this.sessionFiles(home)) {
             try {
-                const session = await this.readSession(filePath);
+                const session = await this.scan(filePath, false);
                 summaries.push({
-                    provider: this.provider,
+                    provider: session.provider,
                     sessionId: session.sessionId,
-                    title: this.getSessionTitle(session),
+                    title: session.title,
                     cwd: session.cwd,
-                    timestamp: this.summaryTimestamp(session),
-                    path: filePath,
-                    messageCount: this.countMessages(session),
+                    timestamp: session.latestTimestamp,
+                    path: session.path,
+                    messageCount: session.messageCount,
                 });
             } catch (error) {
                 process.stderr.write(`warning: skipped unreadable session ${filePath}: ${String(error)}\n`);
@@ -81,7 +80,7 @@ export abstract class AbstractAgent {
         return summaries.sort(compareSessionTimestamp);
     }
 
-    async loadSession(sessionId: string, home = this.defaultHome()): Promise<NativeSession> {
+    async loadSession(sessionId: string, home = this.defaultHome()): Promise<SessionData> {
         const files = await this.sessionFiles(home);
         const named = new Set(files.filter((filePath) => this.sessionIdFromPath(filePath) === sessionId));
         const ordered = named.size
@@ -89,7 +88,7 @@ export abstract class AbstractAgent {
             : files;
         for (const filePath of ordered) {
             try {
-                const candidate = await this.readSession(filePath);
+                const candidate = await this.scan(filePath, true);
                 if (candidate.sessionId === sessionId) return candidate;
             } catch (error) {
                 process.stderr.write(`warning: skipped unreadable session ${filePath}: ${String(error)}\n`);
@@ -111,50 +110,39 @@ export abstract class AbstractAgent {
 
     protected abstract sessionRoots(home: string): string[];
 
-    protected abstract metadataFor(
-        records: JsonObject[],
-        filePath: string,
-        fallbackTimestamp: string,
-    ): SessionMetadata;
-
-    protected nativeTitle(_session: NativeSession): string | undefined {
-        return undefined;
-    }
-
-    /** Text of a user message to consider for a fallback title, before first-line formatting. */
-    protected titleText(message: TextMessage): string {
-        return message.text;
-    }
-
     /** Session id a file name implies, used only to try likely files first; records stay authoritative. */
     protected sessionIdFromPath(filePath: string): string {
         return path.basename(filePath, this.sessionExtension);
     }
 
-    protected summaryTimestamp(session: NativeSession): string {
-        return session.timestamp;
-    }
-
-    protected normalizeRecords(records: JsonObject[]): JsonObject[] {
-        return records;
-    }
-
-    protected iterateMessages(session: NativeSession): Iterable<TextMessage> {
-        return this.extractMessages(session);
-    }
-
-    private async readRecords(filePath: string): Promise<{ records: JsonObject[]; modified: string }> {
-        let records: JsonObject[];
+    private async scan(filePath: string, collectMessages: boolean): Promise<SessionData> {
+        const accumulator = this.createAccumulator({collectMessages});
         if (this.storageFormat === 'json') {
-            const value = asObject(JSON.parse(await readFile(filePath, 'utf8')));
-            if (!value) throw new TypeError(`${this.label} export must contain a JSON object: ${filePath}`);
-            records = [value];
+            const content = await readFile(filePath, 'utf8');
+            accumulator.add(requiredObject(JSON.parse(content), `${this.label} export`));
         } else {
-            records = await readJsonl(filePath);
+            await forEachJsonlRecord(filePath, (record) => accumulator.add(record));
+        }
+        const modified = (await stat(filePath)).mtime.toISOString();
+        const scanned = accumulator.finish(modified);
+
+        const timestamp = scanned.timestamp ?? modified;
+        // A record without its own timestamp inherits the session's, which is only known now.
+        for (const message of scanned.messages) {
+            if (!message.timestamp) message.timestamp = timestamp;
         }
         return {
-            records: this.normalizeRecords(records),
-            modified: (await stat(filePath)).mtime.toISOString(),
+            provider: this.provider,
+            path: filePath,
+            sessionId: scanned.sessionId ?? this.sessionIdFromPath(filePath),
+            cwd: scanned.cwd ?? '',
+            timestamp,
+            latestTimestamp: scanned.latestTimestamp ?? timestamp,
+            title: formatNativeSessionTitle(scanned.nativeTitle)
+                ?? formatSessionTitle(scanned.fallbackTitle)
+                ?? 'Untitled session',
+            messageCount: scanned.messageCount,
+            messages: scanned.messages,
         };
     }
 
@@ -182,6 +170,25 @@ export abstract class AbstractAgent {
             else if (entry.isFile() && entry.name.endsWith(this.sessionExtension)) files.push(filePath);
         }
         return files;
+    }
+}
+
+/** Tracks the newest timestamp seen while scanning records. */
+export class LatestTimestamp {
+    private value: string | undefined;
+    private instant = Number.NEGATIVE_INFINITY;
+
+    offer(timestamp: string | undefined): void {
+        if (!timestamp) return;
+        const instant = Date.parse(timestamp);
+        if (Number.isFinite(instant) && instant >= this.instant) {
+            this.value = timestamp;
+            this.instant = instant;
+        }
+    }
+
+    get latest(): string | undefined {
+        return this.value;
     }
 }
 

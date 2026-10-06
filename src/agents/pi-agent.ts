@@ -1,9 +1,16 @@
 import {randomUUID} from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import type {ConversionService, JsonObject, NativeSession, TextMessage,} from '../types.js';
+import type {ConversionService, JsonObject, TextMessage,} from '../types.js';
 import {asObject, contentToText, stringValue} from '../json.js';
-import {AbstractAgent, type AgentConversionOptions} from './abstract-agent.js';
+import {
+    AbstractAgent,
+    type AccumulatedSession,
+    type AccumulatorOptions,
+    type AgentConversionOptions,
+    LatestTimestamp,
+    type SessionAccumulator,
+} from './abstract-agent.js';
 
 export class PiAgent extends AbstractAgent {
     readonly provider = 'pi' as const;
@@ -11,23 +18,14 @@ export class PiAgent extends AbstractAgent {
     readonly storageFormat = 'jsonl' as const;
     readonly sessionExtension = '.jsonl' as const;
 
-    private readonly extractor = new PiMessageExtractor();
     private readonly builder = new PiRecordBuilder();
 
     defaultHome(home = os.homedir()): string {
         return path.join(home, '.pi', 'agent');
     }
 
-    extractMessages(session: NativeSession): TextMessage[] {
-        return [...this.iterateMessages(session)];
-    }
-
-    protected iterateMessages(session: NativeSession): Iterable<TextMessage> {
-        return this.extractor.iterate(session);
-    }
-
-    countMessages(session: NativeSession): number {
-        return session.records.filter((record) => record.type === 'message' || record.type === 'compaction').length;
+    createAccumulator(options: AccumulatorOptions): SessionAccumulator {
+        return new PiAccumulator(options.collectMessages);
     }
 
     destinationPath(home: string, sessionId: string, cwd: string, timestamp: string): string {
@@ -75,59 +73,83 @@ export class PiAgent extends AbstractAgent {
         return path.basename(filePath, '.jsonl').split('_').at(-1) ?? path.basename(filePath);
     }
 
-    protected metadataFor(
-        records: JsonObject[],
-        filePath: string,
-        fallbackTimestamp: string,
-    ): Pick<NativeSession, 'sessionId' | 'cwd' | 'timestamp'> {
-        const header = records.find((record) => record.type === 'session');
-        return {
-            sessionId: (header ? stringValue(header, 'id') : undefined)
-                ?? this.sessionIdFromPath(filePath),
-            cwd: (header ? stringValue(header, 'cwd') : undefined) ?? '',
-            timestamp: (header ? stringValue(header, 'timestamp') : undefined) ?? fallbackTimestamp,
-        };
-    }
 }
 
-class PiMessageExtractor {
-    *iterate(session: NativeSession): Generator<TextMessage> {
-        let currentProvider: string | undefined;
-        let currentModel: string | undefined;
-        for (const record of session.records) {
-            if (record.type === 'model_change') {
-                currentProvider = stringValue(record, 'provider') ?? currentProvider;
-                currentModel = stringValue(record, 'modelId') ?? currentModel;
-                continue;
+class PiAccumulator implements SessionAccumulator {
+    private readonly latest = new LatestTimestamp();
+    private readonly messages: TextMessage[] = [];
+    private headerSeen = false;
+    private headerId: string | undefined;
+    private headerCwd: string | undefined;
+    private headerTimestamp: string | undefined;
+    private currentProvider: string | undefined;
+    private currentModel: string | undefined;
+    private fallbackTitle: string | undefined;
+    private messageCount = 0;
+
+    constructor(private readonly collectMessages: boolean) {
+    }
+
+    add(record: JsonObject): void {
+        const timestamp = stringValue(record, 'timestamp');
+        this.latest.offer(timestamp);
+
+        if (!this.headerSeen && record.type === 'session') {
+            this.headerSeen = true;
+            this.headerId = stringValue(record, 'id');
+            this.headerCwd = stringValue(record, 'cwd');
+            this.headerTimestamp = timestamp;
+        }
+        if (record.type === 'model_change') {
+            this.currentProvider = stringValue(record, 'provider') ?? this.currentProvider;
+            this.currentModel = stringValue(record, 'modelId') ?? this.currentModel;
+            return;
+        }
+        if (record.type === 'compaction') {
+            this.messageCount += 1;
+            const text = stringValue(record, 'summary');
+            if (text) {
+                this.consider({role: 'user', text, timestamp: timestamp ?? '', isCompaction: true});
             }
-            if (record.type === 'compaction') {
-                const text = stringValue(record, 'summary');
-                if (text) yield {
-                    role: 'user',
-                    text,
-                    timestamp: stringValue(record, 'timestamp') ?? session.timestamp,
-                    isCompaction: true,
-                };
-                continue;
-            }
-            if (record.type !== 'message') continue;
-            const message = asObject(record.message);
-            if (!message) continue;
-            const sourceRole = stringValue(message, 'role');
-            if (!sourceRole || !['user', 'assistant', 'system'].includes(sourceRole)) continue;
-            const text = contentToText(message.content);
-            if (!text) continue;
-            const model = stringValue(message, 'model') ?? currentModel;
-            const provider = stringValue(message, 'provider') ?? currentProvider;
-            const api = stringValue(message, 'api');
-            yield {
-                role: sourceRole === 'system' ? 'user' : sourceRole as TextMessage['role'],
-                text,
-                timestamp: stringValue(record, 'timestamp') ?? stringValue(message, 'timestamp') ?? session.timestamp,
-                ...(model !== undefined ? {model} : {}),
-                ...(provider !== undefined ? {provider} : {}),
-                ...(api !== undefined ? {api} : {}),
-            };
+            return;
+        }
+        if (record.type !== 'message') return;
+        this.messageCount += 1;
+        const message = asObject(record.message);
+        if (!message) return;
+        const sourceRole = stringValue(message, 'role');
+        if (!sourceRole || !['user', 'assistant', 'system'].includes(sourceRole)) return;
+        const text = contentToText(message.content);
+        if (!text) return;
+        const model = stringValue(message, 'model') ?? this.currentModel;
+        const provider = stringValue(message, 'provider') ?? this.currentProvider;
+        const api = stringValue(message, 'api');
+        this.consider({
+            role: sourceRole === 'system' ? 'user' : sourceRole as TextMessage['role'],
+            text,
+            timestamp: timestamp ?? stringValue(message, 'timestamp') ?? '',
+            ...(model !== undefined ? {model} : {}),
+            ...(provider !== undefined ? {provider} : {}),
+            ...(api !== undefined ? {api} : {}),
+        });
+    }
+
+    finish(fallbackTimestamp: string): AccumulatedSession {
+        return {
+            ...(this.headerId !== undefined ? {sessionId: this.headerId} : {}),
+            cwd: this.headerCwd ?? '',
+            timestamp: this.headerTimestamp ?? fallbackTimestamp,
+            ...(this.latest.latest !== undefined ? {latestTimestamp: this.latest.latest} : {}),
+            ...(this.fallbackTitle !== undefined ? {fallbackTitle: this.fallbackTitle} : {}),
+            messageCount: this.messageCount,
+            messages: this.messages,
+        };
+    }
+
+    private consider(message: TextMessage): void {
+        if (this.collectMessages) this.messages.push(message);
+        if (this.fallbackTitle === undefined && message.role === 'user' && message.text.trim()) {
+            this.fallbackTitle = message.text;
         }
     }
 }

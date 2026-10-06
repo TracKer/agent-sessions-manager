@@ -71,8 +71,8 @@ describe('session conversion', () => {
       compressions: [],
     });
     const converted = await loadSession('pi', sessionId, piHome);
-    expect(converted.records).toHaveLength(3);
-    expect(converted.records[2]?.message).toMatchObject({ role: 'assistant' });
+    expect(converted.messages).toHaveLength(2);
+    expect(converted.messages[1]?.role).toBe('assistant');
   });
 
   it('converts OpenCode exports to Claude JSONL and rejects accidental overwrites', async () => {
