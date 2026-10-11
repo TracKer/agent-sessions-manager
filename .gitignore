@@ -1,6 +1,7 @@
 # Project
 .local/
 .idea/
+.vault/
 
 # Logs
 logs
