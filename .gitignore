@@ -2,6 +2,7 @@
 .local/
 .idea/
 .vault/
+/converter-coverage.html
 
 # Logs
 logs
