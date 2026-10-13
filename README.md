@@ -1,4 +1,4 @@
-# Agent Sessions Manager
+# (Work In Progress) Agent Sessions Manager
 
 A command-line application for listing and converting AI coding-agent sessions.
 
